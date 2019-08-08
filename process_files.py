@@ -2,7 +2,7 @@ import os
 import tempfile
 import csv
 import imgsplit
-import tiff_converter
+import img_converter
 import file_scan
 import create_dirs
 from wand.image import Image
@@ -95,8 +95,19 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             os.mkdir(temp_split_dir)
             os.mkdir(temp_txt_dir)
 
-            # DONE -- convert file to tiff
-            raw_tiff_path = tiff_converter.convert_file(file, temp_file, input_format=file_extension[1:], output_format="tiff")
+
+            # if not PDF, convert first to pdf
+            if ( file_extension != ".pdf" ):
+
+                temp_pdf_file = temp_dir.name + "/" + filename + ".pdf"
+
+                temp_pdf_path = img_converter.convert_file(file, temp_pdf_file, input_format=file_extension[1:], output_format="pdf")
+                raw_tiff_path = img_converter.convert_file(temp_pdf_path, temp_file, input_format="pdf", output_format="tiff")
+
+            else:
+
+                # DONE -- convert file to tiff
+                raw_tiff_path = img_converter.convert_file(file, temp_file, input_format=file_extension[1:], output_format="tiff")
 
             # DONE -- split multipage tiff into individual tiffs
             split_tiffs_path = imgsplit.split_multipage_tiff(raw_tiff_path, temp_split_dir)
@@ -112,14 +123,18 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                     height = img.height
                     width = img.width
 
+
                     # 10 point arial font should be roughly 1/80th the height of the tiff and 1/118th the width
                     # 12 point arial font should be roughly 1/66th the height of the tiff and 1/92nd the width
                     # use the values to dynamically size the caption added to each page
 
-                    font = Font(path='/Library/Fonts/Arial.ttf', size=int(height/80))
-                    img.caption(caption1, top=78*int(height/80), left=(116-len(caption1))*int(width/118), font=font)
+                    font_height = int(height/80)
+                    nfw = width/(font_height*0.52) # nfw = number of font widths (i.e., letters that fit across the screen)
+
+                    font = Font(path='/Library/Fonts/Arial.ttf', size=font_height)
+                    img.caption(caption1, top=int(78*font_height), left=int((nfw-2-len(caption1))*int(width/nfw)), font=font)
                     if confidentiality == True:
-                        img.caption(caption2, top=78*int(height/80), left=2*int(width/118), font=font)
+                        img.caption(caption2, top=int(78*font_height), left=int(2*int(width/nfw)), font=font)
                     img.save(filename=tiff_file)
 
                 # rename tiff files with bates number
@@ -145,7 +160,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 os.rename(tiff_file, prod_img001 + "/" + filename)
 
             # extract text and move text to propoer output_directory
-            raw_txt_path = tiff_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt")
+            raw_txt_path = img_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt")
             os.rename(temp_txt_file, prod_txt001 + "/" + f"{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt")
 
             # write DAT file row
