@@ -151,7 +151,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             # write DAT file row
             with open(dat_file, mode="a") as dat_f:
                 dat_writer = csv.writer(dat_f, delimiter=",")
-                dat_writer.writerow([f"þ{production_prefix}{str(beginning_bates_number).zfill(num_digits)}þþ{production_prefix}{str(current_bates_number).zfill(num_digits)}þþ./{volume_number}/TEXT/TEXT001/{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txtþ"])
+                dat_writer.writerow([f"þ{production_prefix}{str(beginning_bates_number).zfill(num_digits)}þþ{production_prefix}{str(current_bates_number-1).zfill(num_digits)}þþ./{volume_number}/TEXT/TEXT001/{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txtþ"])
 
         # clean up temporary directory
         temp_dir.cleanup()
