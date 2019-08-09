@@ -14,6 +14,7 @@ from wand.drawing import Drawing
 from wand.font import Font
 from wand.color import Color
 from shutil import copyfile
+from PIL import Image as PILImage
 
 
 def process_files(volume_number, production_prefix, start_bates_number, num_digits, confidentiality, files_to_convert, dirs, files):
@@ -91,7 +92,11 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 if confidentiality == True:
                     img.caption(caption2, top=78*int(height/80), left=2*int(width/118), font=font1)
 
-                img.save(filename=f"{prod_img001}/{caption1}.jpg" )
+                img.save(filename=f"{prod_img001}/{caption1}.jpg")
+
+            # reduce file size
+            full_size = PILImage.open(f"{prod_img001}/{caption1}.jpg")
+            full_size.save(f"{prod_img001}/{caption1}.jpg", optimize=True, quality=50)
 
             ## STEP 3: UPDATE PRODUCTION DATA FILES
 
@@ -107,6 +112,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
 
             ## STEP 4: CREATE EMPTY TEXT FILE -- NOT EXTRACTING TEXT FOR DOCUMENTS PRODUCED AS NATIVES
 
+            # do it
             create_dirs.touch(f"{prod_txt001}/{caption1}.txt")
 
             ## STEP 5: INCREMENT BATES NUMBER (FOR NEXT FILE)
@@ -173,6 +179,10 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 # rename jpg files with bates number
                 new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}.jpg"
                 os.rename(jpg_file, f"{split_jpgs_path}/{new_filename}")
+
+                # reduce file size
+                full_size = PILImage.open(f"{split_jpgs_path}/{new_filename}")
+                full_size.save(f"{split_jpgs_path}/{new_filename}", optimize=True, quality=50)
 
                 # write OPT file row
                 with open(opt_file, mode="a", encoding="cp1252") as opt_f:

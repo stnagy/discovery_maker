@@ -26,8 +26,6 @@ def create_dirs(volume_number):
             os.mkdir(i)
         except OSError:
             print ("Creation of the directory %s failed" % i)
-        else:
-            print ("Successfully created the directory %s " % i)
 
     return prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir
 
