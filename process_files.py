@@ -1,20 +1,25 @@
-import os
-import tempfile
-import csv
+
 import imgsplit
 import img_converter
 import file_scan
 import create_dirs
+import progress_bar
+
+import os
+import tempfile
+import csv
+
 from wand.image import Image
 from wand.drawing import Drawing
 from wand.font import Font
 from wand.color import Color
 from shutil import copyfile
 
+
 def process_files(volume_number, production_prefix, start_bates_number, num_digits, confidentiality, files_to_convert, dirs, files):
 
     # get dirs and files
-    prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001 = dirs
+    prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
     opt_file, dat_file = files
 
     # integerize digit number
@@ -23,10 +28,12 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
     # initialize bates number
     current_bates_number = int(start_bates_number)
 
-    # iterate over directory of input files
-    for file in files_to_convert:
-        print(f"Converting {file}...")
+    # print progress bar
+    l = len(files_to_convert)
+    progress_bar.printProgressBar(0, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
+    # iterate over directory of input files
+    for i, file in enumerate(files_to_convert):
         beginning_bates_number = current_bates_number
 
         # get file path + extension
@@ -46,15 +53,26 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
 
         # for some files, just produce natives
         if ( file_extension in [".csv", ".xls", ".xlsx"] ):
-            if confidentiality == True:
-                copyfile(file, prod_nat001 + "/" + f"{production_prefix}{str(current_bates_number).zfill(num_digits)}-CONFIDENTIAL" + file_extension)
-            else:
-                copyfile(file, prod_nat001 + "/" + f"{production_prefix}{str(current_bates_number).zfill(num_digits)}" + file_extension)
 
-            # add bates number / confidentiality designations / main text
+            ## STEP 1: COPY NATIVE AND RENAME WITH BATES NUMBER
+
+            # create new file name (potentially incorporating confidentiality designation)
+            if confidentiality == True:
+                new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}-CONFIDENTIAL"
+            else:
+                new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
+
+            # copy native file into correct production folder and name with new file name
+            copyfile(file, prod_nat001 + "/" + f"{new_filename}{file_extension}")
+
+            ## STEP 2: CREATE IMAGE PLACEHOLDER TO NOTIFY RECIPIENT THAT DOCUMENT IS PRODUCED IN NATIVE FORM
+
+            # create sheet, create bates number / confidentiality designations / main text
             caption1 = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
             caption2 = "CONFIDENTIAL BUSINESS INFORMATION - SUBJECT TO PROTECTIVE ORDER"
             main_text = "DOCUMENT PRODUCED AS NATIVE"
+
+            # sheet is 8.5 x 11 (plain letter size)
             with Image(width=2550, height=3300, background=Color("WHITE")) as img:
                 height = img.height
                 width = img.width
@@ -75,17 +93,23 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
 
                 img.save(filename=f"{prod_img001}/{caption1}.tiff" )
 
+            ## STEP 3: UPDATE PRODUCTION DATA FILES
+
             # write OPT file row
             with open(opt_file, mode="a") as opt_f:
                 opt_writer = csv.writer(opt_f, delimiter=",")
-                opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f"./{volume_number}/IMAGES/IMG001/{caption1}.tiff", "Y", "", "", "1"])
+                opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{caption1}.tiff", "Y", "", "", "1"])
 
             # write DAT file row
             with open(dat_file, mode="a") as dat_f:
                 dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
-                dat_writer.writerow([f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}./{volume_number}/TEXT/TEXT001/{caption1}.txt{chr(254)}"])
+                dat_writer.writerow([f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}.\\{volume_number}\\TEXT\\TEXT001\\{caption1}.txt{chr(254)}", f"{chr(254)}.\\{volume_number}\\NATIVES\\NATIVE001\\{new_filename}{file_extension}{chr(254)}"])
+
+            ## STEP 4: CREATE EMPTY TEXT FILE -- NOT EXTRACTING TEXT FOR DOCUMENTS PRODUCED AS NATIVES
 
             create_dirs.touch(f"{prod_txt001}/{caption1}.txt")
+
+            ## STEP 5: INCREMENT BATES NUMBER (FOR NEXT FILE)
 
             # increment bates number
             current_bates_number += 1
@@ -94,7 +118,6 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
 
             os.mkdir(temp_split_dir)
             os.mkdir(temp_txt_dir)
-
 
             # if not PDF, convert first to pdf
             if ( file_extension != ".pdf" ):
@@ -128,13 +151,21 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                     # 12 point arial font should be roughly 1/66th the height of the tiff and 1/92nd the width
                     # use the values to dynamically size the caption added to each page
 
-                    font_height = int(height/80)
-                    nfw = width/(font_height*0.52) # nfw = number of font widths (i.e., letters that fit across the screen)
+                    # different font sizes for portrait vs landscape
+                    # detected by dividing height by width
+                    if (height / width) > 1:
+                        nfh = 80 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
+                    else:
+                        nfh = 45 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
+
+                    far = 0.52 # far = font aspect ratio (i.e., font width / font height)
+                    font_height = int(height/nfh)
+                    nfw = width/(font_height*far) # nfw = number of font widths (i.e., letters that fit across the screen)
 
                     font = Font(path='/Library/Fonts/Arial.ttf', size=font_height)
-                    img.caption(caption1, top=int(78*font_height), left=int((nfw-2-len(caption1))*int(width/nfw)), font=font)
+                    img.caption(caption1, top=int((nfh - 1.5)*font_height), left=int((nfw-3-len(caption1))*int(width/nfw)), font=font)
                     if confidentiality == True:
-                        img.caption(caption2, top=int(78*font_height), left=int(2*int(width/nfw)), font=font)
+                        img.caption(caption2, top=int((nfh - 1.5)*font_height), left=int(2*int(width/nfw)), font=font)
                     img.save(filename=tiff_file)
 
                 # rename tiff files with bates number
@@ -146,9 +177,9 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                     opt_writer = csv.writer(opt_f, delimiter=",")
 
                     if current_bates_number == beginning_bates_number:
-                        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f"./{volume_number}/IMAGES/IMG001/{new_filename}", "Y", "", "", len(split_tiffs_list)])
+                        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{new_filename}", "Y", "", "", len(split_tiffs_list)])
                     else:
-                        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f"./{volume_number}/IMAGES/IMG001/{new_filename}", "", "", "", ""])
+                        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{new_filename}", "", "", "", ""])
 
                 # increment bates number
                 current_bates_number += 1
@@ -166,7 +197,13 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             # write DAT file row
             with open(dat_file, mode="a") as dat_f:
                 dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
-                dat_writer.writerow([f"{chr(254)}{production_prefix}{str(beginning_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number-1).zfill(num_digits)}{chr(254)}",f"{chr(254)}./{volume_number}/TEXT/TEXT001/{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt{chr(254)}"])
+                dat_writer.writerow([f"{chr(254)}{production_prefix}{str(beginning_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number-1).zfill(num_digits)}{chr(254)}",f"{chr(254)}.\\{volume_number}\\TEXT\\TEXT001\\{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt{chr(254)}", f"{chr(254)}{chr(254)}"])
+
+        # move file to completed directory
+        os.rename(file, completed_dir + "/" + os.path.basename(file))
 
         # clean up temporary directory
         temp_dir.cleanup()
+
+        # update progress bar
+        progress_bar.printProgressBar(i + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)

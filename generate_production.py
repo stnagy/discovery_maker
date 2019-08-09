@@ -30,12 +30,15 @@ def generate_production():
     all_files = file_scan.recursive_scan()
     files_to_convert = file_scan.filter_all(all_files)
     process_files.process_files(volume_number, production_prefix, start_bates_number, num_digits, confidentiality, files_to_convert, dirs, files)
-    # iterate over directory of input files
+    # DONE -- iterate over directory of input files
         # DONE -- convert file to tiff
         # DONE -- split multipage tiff into individual tiffs
-        # rename each individual tiff
-        # label each individual tiff
-        # move each individual tiff to proper output_directory
-        # extract text
-        # move text to propoer output_directory
-        # update OPT / DAT file
+        # DONE -- rename each individual tiff
+        # DONE -- label each individual tiff
+        # DONE -- move each individual tiff to proper output_directory
+        # DONE -- extract text
+        # DONE -- move text to propoer output_directory
+        # DONE -- update OPT / DAT file
+
+if __name__ == '__main__':
+    generate_production()
