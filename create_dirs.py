@@ -41,23 +41,26 @@ def create_files(volume_number):
     opt_file = prod_home + "/" + volume_number + ".opt"
     dat_file = prod_home + "/" + volume_number + ".dat"
 
-    # create files using file strings
-    for i in [opt_file, dat_file]:
+    # create opt file
+    try:
+        touch(opt_file, encoding="cp1252")
+    except OSError:
+        print ("Creation of the file %s failed" % opt_file)
 
-        try:
-            touch(i)
-        except OSError:
-            print ("Creation of the file %s failed" % i)
-        else:
-            print ("Successfully created the file %s " % i)
+    # create dat file
+    try:
+        touch(dat_file, encoding="utf-8")
+    except OSError:
+        print ("Creation of the file %s failed" % dat_file)
 
-    with open(dat_file, mode="w") as dat_f:
+    # write dat header row
+    with open(dat_file, mode="w", encoding="utf-8") as dat_f:
         dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
-        dat_writer.writerow([f"{chr(254)}Production::Begin Bates{chr(254)}",f"{chr(254)}Production::End Bates{chr(254)}",f"{chr(254)}Text Precedence{chr(254)}",f"{chr(254)}Native Document{chr(254)}"])
+        dat_writer.writerow([f"{chr(254)}Begin Bates{chr(254)}",f"{chr(254)}End Bates{chr(254)}",f"{chr(254)}Extracted Text{chr(254)}",f"{chr(254)}Native Document{chr(254)}"])
 
     return opt_file, dat_file
 
 # helper method for creating files (mimics 'touch' util)
-def touch(path):
-    with open(path, 'a'):
+def touch(path, encoding="utf-8"):
+    with open(path, mode='a', encoding=encoding):
         os.utime(path, None)
