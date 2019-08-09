@@ -50,8 +50,8 @@ def create_files(volume_number):
             print ("Successfully created the file %s " % i)
 
     with open(dat_file, mode="a") as dat_f:
-        dat_writer = csv.writer(dat_f, delimiter=",")
-        dat_writer.writerow(["þProduction::Begin BatesþþProduction::End BatesþþText Precedenceþ"])
+        dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
+        dat_writer.writerow([f"{chr(254)}Production::Begin Bates{chr(254)}",f"{chr(254)}Production::End Bates{chr(254)}",f"{chr(254)}Text Precedence{chr(254)}"])
 
     return opt_file, dat_file
 
