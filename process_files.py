@@ -8,6 +8,7 @@ import progress_bar
 import os
 import tempfile
 import csv
+import threading
 
 from wand.image import Image
 from wand.drawing import Drawing
@@ -141,64 +142,67 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             # DONE -- split multipage tiff into individual jpgs
             split_jpgs_path = imgsplit.split_multipage_tiff(temp_pdf_path, temp_split_dir)
 
-            # rename each individual jpg, tag with bates number and designations, and update OPT file
+            # rename each individual jpg, tag with bates number and designations
+            # multithread this operation to speed up
             split_jpgs_list = file_scan.recursive_scan(split_jpgs_path)
-            output_image_array = []
-            for jpg_file in sorted(split_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f))))):
+            sorted_split_jpgs_list = sorted(split_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f)))))
+            max_threads = 1
 
-                # add bates number / confidentiality designations
-                caption1 = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
-                caption2 = "CONFIDENTIAL BUSINESS INFORMATION - SUBJECT TO PROTECTIVE ORDER"
-                with Image(filename=jpg_file) as img:
-                    height = img.height
-                    width = img.width
+            for i, jpg_files in enumerate(batch(sorted_split_jpgs_list, n=max_threads)):
 
+                ## MULTITHREAD THIS PART TO INCREASE PROCESSOR UTILIZATION
+                ## GENERATING JPG IS LONGEST PART OF PROCESS
 
-                    # 10 point arial font should be roughly 1/80th the height of the image and 1/118th the width
-                    # 12 point arial font should be roughly 1/66th the height of the image and 1/92nd the width
-                    # use the values to dynamically size the caption added to each page
+                # form arguments
+                t0_file = jpg_files[0]
+                #t1_file = jpg_files[1]
+                #t2_file = jpg_files[2]
+                #t3_file = jpg_files[3]
 
-                    # different font sizes for portrait vs landscape
-                    # detected by dividing height by width
-                    if (height / width) > 1:
-                        nfh = 80 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
-                    else:
-                        nfh = 45 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
+                t0_i = 0
+                #t1_i = 1
+                #t2_i = 2
+                #t3_i = 3
 
-                    far = 0.52 # far = font aspect ratio (i.e., font width / font height)
-                    font_height = height/nfh
-                    nfw = width/(font_height*far) # nfw = number of font widths (i.e., letters that fit across the screen)
+                t0_bates = f"{production_prefix}{str(current_bates_number + t0_i).zfill(num_digits)}"
+                #t1_bates = f"{production_prefix}{str(current_bates_number + t1_i).zfill(num_digits)}"
+                #t2_bates = f"{production_prefix}{str(current_bates_number + t2_i).zfill(num_digits)}"
+                #t3_bates = f"{production_prefix}{str(current_bates_number + t3_i).zfill(num_digits)}"
 
-                    font = Font(path='/Library/Fonts/Arial.ttf', size=font_height, color=Color("black"))
-                    img.caption(caption1, font=font, gravity="south_east")
-                    if confidentiality == True:
-                        img.caption(caption2, font=font, gravity="south_west")
-                    img.save(filename=jpg_file)
+                # create threads
+                t0 = threading.Thread(target=generate_jpg, args=(t0_file, split_jpgs_path, t0_bates, confidentiality,))
+                #t1 = threading.Thread(target=generate_jpg, args=(t1_file, split_jpgs_path, t1_bates, confidentiality,))
+                #t2 = threading.Thread(target=generate_jpg, args=(t2_file, split_jpgs_path, t2_bates, confidentiality,))
+                #t3 = threading.Thread(target=generate_jpg, args=(t3_file, split_jpgs_path, t3_bates, confidentiality,))
 
-                # rename jpg files with bates number
-                new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}.jpg"
-                os.rename(jpg_file, f"{split_jpgs_path}/{new_filename}")
+                # start threads
+                t0.start()
+                #t1.start()
+                #t2.start()
+                #t3.start()
 
-                # reduce file size
-                full_size = PILImage.open(f"{split_jpgs_path}/{new_filename}")
-                full_size.save(f"{split_jpgs_path}/{new_filename}", optimize=True, quality=50)
+                # join threads -- don't continue until all threads have completed
+                # start threads
+                t0.join()
+                #t1.join()
+                #t2.join()
+                #t3.join()
 
-                # write OPT file row
-                with open(opt_file, mode="a", encoding="cp1252") as opt_f:
-                    opt_writer = csv.writer(opt_f, delimiter=",")
+                # write update opt file
+                # do this separately, because we cannot multithread this operation
+                doc_length = len(split_jpgs_list)
+                curr_page = current_bates_number - beginning_bates_number
+                write_opt(opt_file, volume_number, t0_bates, doc_length, curr_page)
+                #write_opt(opt_file, volume_number, t1_bates, doc_length, t1_i)
+                #write_opt(opt_file, volume_number, t2_bates, doc_length, t2_i)
+                #write_opt(opt_file, volume_number, t3_bates, doc_length, t3_i)
 
-                    if current_bates_number == beginning_bates_number:
-                        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{new_filename}", "Y", "", "", len(split_jpgs_list)])
-                    else:
-                        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{new_filename}", "", "", "", ""])
-
-                output_image_array.append(f".\\{volume_number}\\IMAGES\\IMG001\\{new_filename}")
-                # increment bates number
-                current_bates_number += 1
+                # increment current bates number by max threads
+                current_bates_number += max_threads
 
             # move each individual jpg to proper output_directory
             bates_jpgs_list = file_scan.recursive_scan(split_jpgs_path)
-            for jpg_file in bates_jpgs_list:
+            for jpg_file in sorted(bates_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f))))):
                 filename = os.path.basename(jpg_file)
                 os.rename(jpg_file, prod_img001 + "/" + filename)
 
@@ -219,3 +223,64 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
 
         # update progress bar
         progress_bar.printProgressBar(i + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
+
+def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
+    # generate jpg from input parameters
+
+    # generate bates number / confidentiality designations
+    caption1 = bates_number
+    caption2 = "CONFIDENTIAL BUSINESS INFORMATION - SUBJECT TO PROTECTIVE ORDER"
+
+    # reduce file size of image
+    full_size = PILImage.open(jpg_file)
+    full_size.save(jpg_file, optimize=True, dpi=(300,300))
+
+    # use wand image library to edit jpg
+    with Image(filename=jpg_file) as img:
+        height = img.height
+        width = img.width
+
+        # 10 point arial font = 1/80th the height of the image
+        # 12 point arial font = 1/66th the height of the image
+        # different font sizes for portrait vs landscape; detected by dividing height by width
+        if (height / width) > 1:
+            nfh = 80 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
+        else:
+            nfh = 45 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
+        # use nfh to calculate height of font in pixels
+        font_height = height/nfh
+
+        # select font
+        font = Font(path='/Library/Fonts/Arial.ttf', size=font_height, color=Color("black"))
+
+        # draw bates caption
+        img.caption(caption1, font=font, gravity="south_east")
+
+        # draw confidentiality caption
+        if confidentiality == True:
+            img.caption(caption2, font=font, gravity="south_west")
+
+        # save image (overwrite old)
+        img.save(filename=jpg_file)
+
+    # rename image with bates number
+    new_filename = f"{bates_number}.jpg"
+    os.rename(jpg_file, f"{split_jpgs_path}/{new_filename}")
+
+    return
+
+def write_opt(opt_file, volume_number, bates_number, doc_length, i):
+    # write OPT file row
+    with open(opt_file, mode="a", encoding="cp1252") as opt_f:
+        opt_writer = csv.writer(opt_f, delimiter=",")
+        if i == 0:
+            opt_writer.writerow([f"{bates_number}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{bates_number}.jpg", "Y", "", "", doc_length])
+        else:
+            opt_writer.writerow([f"{bates_number}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{bates_number}.jpg", "", "", "", ""])
+
+    return
+
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]

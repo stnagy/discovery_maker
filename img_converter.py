@@ -26,11 +26,16 @@ def convert_file(input_file_path, output_file_path, input_format="pdf", output_f
             process.delete()
 
             return output_file_path
+
+        # retry on CloudConvert exceptions
         except cloudconvert.exceptions.HTTPError:
             continue
+        except cloudconvert.exceptions.ConversionFailed:
+            continue
+
+    # if we fail too many times, just quit
     else:
         raise Exception("Could not communication with CloudConvert after 100 tries")
-
     return
 
 def get_embedded_text(input_file_path, output_file_path, input_format="pdf"):
