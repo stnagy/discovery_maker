@@ -27,7 +27,8 @@ def generate_production():
             # DONE - text
             # DONE - natives
 
-    all_files = file_scan.recursive_scan()
+    production_path = os.getcwd() + "/For Production"
+    all_files = file_scan.recursive_scan(production_path)
     files_to_convert = file_scan.filter_all(all_files)
     process_files.process_files(volume_number, production_prefix, start_bates_number, num_digits, confidentiality, files_to_convert, dirs, files)
     # DONE -- iterate over directory of input files

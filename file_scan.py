@@ -4,6 +4,7 @@ import sys
 def recursive_scan(path=os.getcwd()):
 
     file_list = []
+    #path = os.getcwd() + "/For Production"
 
     # recursive scan to get all files
     for root, subdirs, files in os.walk(path):

@@ -52,6 +52,18 @@ def create_files(volume_number):
         print ("Creation of the file %s failed" % dat_file)
 
     # write dat header row
+
+    # skip dat file if already has data
+    with open(dat_file, mode="r", encoding="utf-8") as dat_f:
+        dat_reader = csv.reader(dat_f, delimiter=f"{chr(20)}")
+
+        # skip this step if dat file exists
+        for row in dat_reader:
+            if row[0] == f"{chr(254)}Begin Bates{chr(254)}":
+                print("WARNING: DAT file already exists ... script will not add headers.")
+                return opt_file, dat_file
+
+    # if no dat file, make one
     with open(dat_file, mode="a", encoding="utf-8") as dat_f:
         dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
         dat_writer.writerow([f"{chr(254)}Begin Bates{chr(254)}",f"{chr(254)}End Bates{chr(254)}",f"{chr(254)}Extracted Text{chr(254)}",f"{chr(254)}Native Document{chr(254)}"])
