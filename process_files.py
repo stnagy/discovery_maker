@@ -83,14 +83,14 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 # 24 point arial font should be roughly 1/33rd the height of the image and 1/49th the width
                 # use the values to dynamically size the caption added to each page
 
-                font1 = Font(path='/Library/Fonts/Arial.ttf', size=int(height/80))
-                font2 = Font(path='/Library/Fonts/Arial.ttf', size=int(height/33))
+                font1 = Font(path='/Library/Fonts/Arial.ttf', size=int(height/80), color=Color("black"))
+                font2 = Font(path='/Library/Fonts/Arial.ttf', size=int(height/33), color=Color("black"))
 
-                img.caption(caption1, top=78*int(height/80), left=(116-len(caption1))*int(width/118), font=font1)
-                img.caption(main_text, top=11*int(height/33), left=int((22-len(main_text)/2)*int(width/49)), font=font2)
+                img.caption(caption1, font=font1, gravity="south_east")
+                img.caption(main_text, font=font2, gravity="center")
 
                 if confidentiality == True:
-                    img.caption(caption2, top=78*int(height/80), left=2*int(width/118), font=font1)
+                    img.caption(caption2, font=font1, gravity="south_west")
 
                 img.save(filename=f"{prod_img001}/{caption1}.jpg")
 
@@ -129,18 +129,17 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             if ( file_extension != ".pdf" ):
 
                 temp_pdf_file = temp_dir.name + "/" + filename + ".pdf"
-
                 temp_pdf_path = img_converter.convert_file(file, temp_pdf_file, input_format=file_extension[1:], output_format="pdf")
-                raw_tiff_path = img_converter.convert_file(temp_pdf_path, temp_tiff_file, input_format="pdf", output_format="tiff")
+                #raw_tiff_path = img_converter.convert_file(temp_pdf_path, temp_tiff_file, input_format="pdf", output_format="tiff")
 
             # if already PDF, convert to tiff directly
             else:
-
+                temp_pdf_path = file
                 # DONE -- convert file to tiff
-                raw_tiff_path = img_converter.convert_file(file, temp_tiff_file, input_format=file_extension[1:], output_format="tiff")
+                #raw_tiff_path = img_converter.convert_file(file, temp_tiff_file, input_format=file_extension[1:], output_format="tiff")
 
             # DONE -- split multipage tiff into individual jpgs
-            split_jpgs_path = imgsplit.split_multipage_tiff(raw_tiff_path, temp_split_dir)
+            split_jpgs_path = imgsplit.split_multipage_tiff(temp_pdf_path, temp_split_dir)
 
             # rename each individual jpg, tag with bates number and designations, and update OPT file
             split_jpgs_list = file_scan.recursive_scan(split_jpgs_path)
@@ -167,13 +166,13 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                         nfh = 45 # nfh = number of font heights (i.e. letters that fit from top to bottom of screen)
 
                     far = 0.52 # far = font aspect ratio (i.e., font width / font height)
-                    font_height = int(height/nfh)
+                    font_height = height/nfh
                     nfw = width/(font_height*far) # nfw = number of font widths (i.e., letters that fit across the screen)
 
-                    font = Font(path='/Library/Fonts/Arial.ttf', size=font_height)
-                    img.caption(caption1, top=int((nfh - 1.5)*font_height), left=int((nfw-3-len(caption1))*int(width/nfw)), font=font)
+                    font = Font(path='/Library/Fonts/Arial.ttf', size=font_height, color=Color("black"))
+                    img.caption(caption1, font=font, gravity="south_east")
                     if confidentiality == True:
-                        img.caption(caption2, top=int((nfh - 1.5)*font_height), left=int(2*int(width/nfw)), font=font)
+                        img.caption(caption2, font=font, gravity="south_west")
                     img.save(filename=jpg_file)
 
                 # rename jpg files with bates number

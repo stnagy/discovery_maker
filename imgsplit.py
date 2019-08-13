@@ -1,12 +1,13 @@
-from wand.image import Image
 import os
 import tempfile
+from pdf2image import convert_from_path
 
-def split_multipage_tiff(tiff_file_path, output_directory=os.getcwd()):
+def split_multipage_tiff(pdf_file_path, output_directory=os.getcwd()):
 
-    # convert tiff file to jpgs
-    with Image(filename=tiff_file_path) as img:
-        with img.convert("jpg") as converted:
-            converted.save(filename=f"{output_directory}/converted.jpg")
+    # convert file to jpgs
+
+    pages = convert_from_path(pdf_file_path, 500)
+    for i, page in enumerate(pages):
+        page.save(f"{output_directory}/converted-{i}.jpg", 'jpeg')
 
     return output_directory
