@@ -35,7 +35,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
     progress_bar.printProgressBar(0, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
     # iterate over directory of input files
-    for i, file in enumerate(files_to_convert):
+    for i_file, file in enumerate(files_to_convert):
         beginning_bates_number = current_bates_number
 
         # get file path + extension
@@ -222,7 +222,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
         temp_dir.cleanup()
 
         # update progress bar
-        progress_bar.printProgressBar(i + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
+        progress_bar.printProgressBar(i_file + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
 def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
     # generate jpg from input parameters
