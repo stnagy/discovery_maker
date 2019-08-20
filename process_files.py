@@ -71,16 +71,9 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             current_bates_number = process_zip_file(temp_zip_file, file_extension, volume_number, production_prefix, current_bates_number, num_digits, dirs, files, current_bates_number)
             continue
 
-        # for some files, just produce natives
-        if ( file_extension in [".csv", ".dwg", ".dxf", ".numbers", ".xls", ".xlsm", ".xlsx" ] ):
-            current_bates_number = process_native_file(file, temp_dir, file_extension, volume_number, production_prefix, current_bates_number, num_digits, confidentiality, dirs, files)
-            continue
-
-        # otherwise, image and get text
-        if ( file_extension in [".doc", ".docm", ".docx", ".html", ".md", ".pages", ".pdf", ".pps", ".ppsx", ".ppt", ".pptm", ".pptx", ".rtf", ".txt" ]):
+        else:
             current_bates_number = process_individual_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files)
             continue
-
 
 def batch(iterable, n=1):
     l = len(iterable)
@@ -138,6 +131,97 @@ def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
     return
 
 def process_individual_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files):
+
+    # for some files, just produce natives
+    if ( file_extension in [".csv", ".dwg", ".dxf", ".numbers", ".xls", ".xlsm", ".xlsx"] ):
+        current_bates_number = process_native_file(file, temp_dir, file_extension, volume_number, production_prefix, current_bates_number, num_digits, confidentiality, dirs, files)
+
+    # otherwise, image and get text
+    elif ( file_extension in [".doc", ".docm", ".docx", ".html", ".md", ".pages", ".pdf", ".pps", ".ppsx", ".ppt", ".pptm", ".pptx", ".rtf", ".txt"]):
+        current_bates_number = process_normal_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files)
+
+    else:
+        print("File format not currently supported")
+        raise TypeError
+
+    return current_bates_number
+
+def process_native_file(file, temp_dir, file_extension, volume_number, production_prefix, current_bates_number, num_digits, confidentiality, dirs, files):
+
+    prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
+    opt_file, dat_file = files
+
+    ## STEP 1: COPY NATIVE AND RENAME WITH BATES NUMBER
+
+    # create new file name (potentially incorporating confidentiality designation)
+    if confidentiality == True:
+        new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}-CONFIDENTIAL"
+    else:
+        new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
+
+    # copy native file into correct production folder and name with new file name
+    copyfile(file, prod_nat001 + "/" + f"{new_filename}{file_extension}")
+
+    ## STEP 2: CREATE IMAGE PLACEHOLDER TO NOTIFY RECIPIENT THAT DOCUMENT IS PRODUCED IN NATIVE FORM
+
+    # create sheet, create bates number / confidentiality designations / main text
+    caption1 = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
+    caption2 = "CONFIDENTIAL BUSINESS INFORMATION - SUBJECT TO PROTECTIVE ORDER"
+    main_text = "DOCUMENT PRODUCED AS NATIVE"
+
+    # sheet is 8.5 x 11 (plain letter size)
+    with Image(width=2550, height=3300, background=Color("WHITE")) as img:
+        height = img.height
+        width = img.width
+
+        # 10 point arial font should be roughly 1/80th the height of the image and 1/118th the width
+        # 12 point arial font should be roughly 1/66th the height of the image and 1/98th the width
+        # 24 point arial font should be roughly 1/33rd the height of the image and 1/49th the width
+        # use the values to dynamically size the caption added to each page
+
+        font1 = Font(path='Arial.ttf', size=int(height/80), color=Color("black"))
+        font2 = Font(path='Arial.ttf', size=int(height/33), color=Color("black"))
+
+        img.caption(caption1, font=font1, gravity="south_east")
+        img.caption(main_text, font=font2, gravity="center")
+
+        if confidentiality == True:
+            img.caption(caption2, font=font1, gravity="south_west")
+
+        img.save(filename=f"{prod_img001}/{caption1}.jpg")
+
+    # reduce file size
+    convert_command = f'convert "{prod_img001}/{caption1}.jpg" -compress group4 "{prod_img001}/{caption1}.tiff"'
+    delete_command = f'rm "{prod_img001}/{caption1}.jpg"'
+    os.system(convert_command)
+    os.system(delete_command)
+
+    ## STEP 3: UPDATE PRODUCTION DATA FILES
+
+    # write OPT file row
+    with open(opt_file, mode="a", encoding="cp1252") as opt_f:
+        opt_writer = csv.writer(opt_f, delimiter=",")
+        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{caption1}.tiff", "Y", "", "", "1"])
+
+    # write DAT file row
+    with open(dat_file, mode="a", encoding="utf-8") as dat_f:
+        dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
+        dat_writer.writerow([f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}.\\{volume_number}\\TEXT\\TEXT001\\{caption1}.txt{chr(254)}", f"{chr(254)}.\\{volume_number}\\NATIVES\\NATIVE001\\{new_filename}{file_extension}{chr(254)}"])
+
+    ## STEP 4: CREATE EMPTY TEXT FILE -- NOT EXTRACTING TEXT FOR DOCUMENTS PRODUCED AS NATIVE
+    create_dirs.touch(f"{prod_txt001}/{caption1}.txt")
+
+    current_bates_number += 1
+
+    os.rename(file, completed_dir + "/" + os.path.basename(file))
+    # clean up temporary directory
+    temp_dir.cleanup()
+    # update progress bar
+    progress_bar.printProgressBar(i_file + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
+
+    return current_bates_number
+
+def process_normal_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files):
 
     prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
     opt_file, dat_file = files
@@ -221,78 +305,9 @@ def process_individual_file(file, temp_dir, temp_split_dir, file_extension, volu
 
     return current_bates_number
 
-def process_native_file(file, temp_dir, file_extension, volume_number, production_prefix, current_bates_number, num_digits, confidentiality, dirs, files):
+def process_zip_file():
 
-    prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
-    opt_file, dat_file = files
-
-    ## STEP 1: COPY NATIVE AND RENAME WITH BATES NUMBER
-
-    # create new file name (potentially incorporating confidentiality designation)
-    if confidentiality == True:
-        new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}-CONFIDENTIAL"
-    else:
-        new_filename = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
-
-    # copy native file into correct production folder and name with new file name
-    copyfile(file, prod_nat001 + "/" + f"{new_filename}{file_extension}")
-
-    ## STEP 2: CREATE IMAGE PLACEHOLDER TO NOTIFY RECIPIENT THAT DOCUMENT IS PRODUCED IN NATIVE FORM
-
-    # create sheet, create bates number / confidentiality designations / main text
-    caption1 = f"{production_prefix}{str(current_bates_number).zfill(num_digits)}"
-    caption2 = "CONFIDENTIAL BUSINESS INFORMATION - SUBJECT TO PROTECTIVE ORDER"
-    main_text = "DOCUMENT PRODUCED AS NATIVE"
-
-    # sheet is 8.5 x 11 (plain letter size)
-    with Image(width=2550, height=3300, background=Color("WHITE")) as img:
-        height = img.height
-        width = img.width
-
-        # 10 point arial font should be roughly 1/80th the height of the image and 1/118th the width
-        # 12 point arial font should be roughly 1/66th the height of the image and 1/98th the width
-        # 24 point arial font should be roughly 1/33rd the height of the image and 1/49th the width
-        # use the values to dynamically size the caption added to each page
-
-        font1 = Font(path='Arial.ttf', size=int(height/80), color=Color("black"))
-        font2 = Font(path='Arial.ttf', size=int(height/33), color=Color("black"))
-
-        img.caption(caption1, font=font1, gravity="south_east")
-        img.caption(main_text, font=font2, gravity="center")
-
-        if confidentiality == True:
-            img.caption(caption2, font=font1, gravity="south_west")
-
-        img.save(filename=f"{prod_img001}/{caption1}.jpg")
-
-    # reduce file size
-    convert_command = f'convert "{prod_img001}/{caption1}.jpg" -compress group4 "{prod_img001}/{caption1}.tiff"'
-    delete_command = f'rm "{prod_img001}/{caption1}.jpg"'
-    os.system(convert_command)
-    os.system(delete_command)
-
-    ## STEP 3: UPDATE PRODUCTION DATA FILES
-
-    # write OPT file row
-    with open(opt_file, mode="a", encoding="cp1252") as opt_f:
-        opt_writer = csv.writer(opt_f, delimiter=",")
-        opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{caption1}.tiff", "Y", "", "", "1"])
-
-    # write DAT file row
-    with open(dat_file, mode="a", encoding="utf-8") as dat_f:
-        dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
-        dat_writer.writerow([f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}.\\{volume_number}\\TEXT\\TEXT001\\{caption1}.txt{chr(254)}", f"{chr(254)}.\\{volume_number}\\NATIVES\\NATIVE001\\{new_filename}{file_extension}{chr(254)}"])
-
-    ## STEP 4: CREATE EMPTY TEXT FILE -- NOT EXTRACTING TEXT FOR DOCUMENTS PRODUCED AS NATIVE
-    create_dirs.touch(f"{prod_txt001}/{caption1}.txt")
-
-    current_bates_number += 1
-
-    os.rename(file, completed_dir + "/" + os.path.basename(file))
-    # clean up temporary directory
-    temp_dir.cleanup()
-    # update progress bar
-    progress_bar.printProgressBar(i_file + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
+    # iterate over files and process them
 
     return current_bates_number
 
