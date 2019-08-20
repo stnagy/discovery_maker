@@ -1,4 +1,5 @@
 import cloudconvert
+import cloudconvert_api_key
 
 def convert_file(input_file_path, output_file_path, input_format="pdf", output_format="tiff"):
 
@@ -6,7 +7,8 @@ def convert_file(input_file_path, output_file_path, input_format="pdf", output_f
     for i in range(0, 100):
         try:
             # create cloudconvert api object
-            api = cloudconvert.Api('-T0p-CGW0fDHOO5WzD0WtHER8Ff0iZoT6e-T_gNkf1pIbeol-eP_bx_67wwWnDG6TJZ0Km3WlYzTJPUCXyn6mg')
+            api_key = cloudconvert_api_key.get_api_key()
+            api = cloudconvert.Api(api_key)
 
             # create cloudconvert process object
             process = api.convert({

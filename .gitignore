@@ -9,3 +9,6 @@ Thumbs.db
 
 # Python
 __pycache__/
+
+# CloudConvert API Key
+cloudconvert_api_key.py

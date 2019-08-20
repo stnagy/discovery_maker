@@ -175,15 +175,22 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 # increment current bates number by max threads
                 current_bates_number += min(max_threads, len(jpg_files))
 
-            # move each individual jpg to proper output_directory
-            # convert to Group 4 tiff to reduce size
+            # convert to Group 4 tiff to reduce size -- move to correct output directory
             bates_jpgs_list = file_scan.recursive_scan(split_jpgs_path)
-            for jpg_file in sorted(bates_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f))))):
-                filename, ext = os.path.splitext(os.path.basename(jpg_file))
-                convert_command = f'convert "{jpg_file}" -compress group4 "{prod_img001}/{filename}.tiff"'
-                delete_command = f'rm "{jpg_file}"'
-                os.system(convert_command)
-                os.system(delete_command)
+            for jpg_files in batch(sorted(bates_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f))))), n=max_threads):
+
+                ## MULTITHREAD THIS PART TO INCREASE PROCESSOR UTILIZATION
+
+                threads_list = []
+                for j in range(min(max_threads, len(jpg_files))):
+                    jpg_file = jpg_files[j]
+                    threads_list.append(threading.Thread(target=convert_jpg_to_tiff, args=(jpg_file, prod_img001,)))
+
+                for thread in threads_list:
+                    thread.start()
+
+                for thread in threads_list:
+                    thread.join()
 
             # extract text and move text to proper output_directory
             raw_txt_path = cloud_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt")
@@ -241,6 +248,15 @@ def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
     # rename image with bates number
     new_filename = f"{bates_number}.jpg"
     os.rename(jpg_file, f"{split_jpgs_path}/{new_filename}")
+
+    return
+
+def convert_jpg_to_tiff(jpg_file, prod_img001):
+    filename, ext = os.path.splitext(os.path.basename(jpg_file))
+    convert_command = f'convert "{jpg_file}" -compress group4 "{prod_img001}/{filename}.tiff"'
+    delete_command = f'rm "{jpg_file}"'
+    os.system(convert_command)
+    os.system(delete_command)
 
     return
 
