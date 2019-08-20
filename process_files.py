@@ -152,7 +152,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             # threading
             max_threads = 4
 
-            for i, jpg_files in enumerate(batch(sorted_split_jpgs_list, n=max_threads)):
+            for jpg_files in batch(sorted_split_jpgs_list, n=max_threads):
 
                 ## MULTITHREAD THIS PART TO INCREASE PROCESSOR UTILIZATION
                 ## GENERATING JPG IS SLOWEST PART OF PROCESS

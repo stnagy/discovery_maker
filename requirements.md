@@ -6,5 +6,5 @@
 * wand
 * pillow (PIL)
 * pdf2image
-* cloudcovert
+* cloudconvert
 * pysnooper
