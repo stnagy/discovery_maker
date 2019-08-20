@@ -7,3 +7,4 @@
 * pillow (PIL)
 * pdf2image
 * cloudcovert
+* pysnooper

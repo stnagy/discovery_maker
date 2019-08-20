@@ -4,6 +4,7 @@ import cloud_converter
 import file_scan
 import create_dirs
 import progress_bar
+import pysnooper
 
 import os
 import tempfile
@@ -17,7 +18,7 @@ from wand.color import Color
 from shutil import copyfile
 from PIL import Image as PILImage
 
-
+@pysnooper.snoop("pysnooper.log")
 def process_files(volume_number, production_prefix, start_bates_number, num_digits, confidentiality, files_to_convert, dirs, files):
 
     # get dirs and files
@@ -84,8 +85,8 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 # 24 point arial font should be roughly 1/33rd the height of the image and 1/49th the width
                 # use the values to dynamically size the caption added to each page
 
-                font1 = Font(path='/Library/Fonts/Arial.ttf', size=int(height/80), color=Color("black"))
-                font2 = Font(path='/Library/Fonts/Arial.ttf', size=int(height/33), color=Color("black"))
+                font1 = Font(path='Arial.ttf', size=int(height/80), color=Color("black"))
+                font2 = Font(path='Arial.ttf', size=int(height/33), color=Color("black"))
 
                 img.caption(caption1, font=font1, gravity="south_east")
                 img.caption(main_text, font=font2, gravity="center")
@@ -149,7 +150,7 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             sorted_split_jpgs_list = sorted(split_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f)))))
 
             # threading
-            max_threads = 1
+            max_threads = 4
 
             for i, jpg_files in enumerate(batch(sorted_split_jpgs_list, n=max_threads)):
 
@@ -157,10 +158,13 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 ## GENERATING JPG IS SLOWEST PART OF PROCESS
 
                 threads_list = []
-                for j in range(max_threads):
+                doc_length = len(split_jpgs_list)
+                curr_page = current_bates_number - beginning_bates_number
+                for j in range(min(max_threads, len(jpg_files))):
                     this_bates = f"{production_prefix}{str(current_bates_number + j).zfill(num_digits)}"
                     this_file = jpg_files[j]
                     threads_list.append(threading.Thread(target=generate_jpg, args=(this_file, split_jpgs_path, this_bates, confidentiality,)))
+                    write_opt(opt_file, volume_number, this_bates, doc_length, curr_page + j)
 
                 for thread in threads_list:
                     thread.start()
@@ -168,14 +172,8 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 for thread in threads_list:
                     thread.join()
 
-                # write OPT rows after creating images
-                doc_length = len(split_jpgs_list)
-                curr_page = current_bates_number - beginning_bates_number
-                for j in range(max_threads):
-                    write_opt(opt_file, volume_number, this_bates, doc_length, curr_page + j)
-
                 # increment current bates number by max threads
-                current_bates_number += max_threads
+                current_bates_number += min(max_threads, len(jpg_files))
 
             # move each individual jpg to proper output_directory
             # convert to Group 4 tiff to reduce size
