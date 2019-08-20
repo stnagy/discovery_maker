@@ -1,10 +1,11 @@
 import get_production_data
 import create_dirs
-import img_converter
-import imgsplit
+import cloud_converter
+import pdfsplit
 import file_scan
 import tempfile
 import process_files
+import dat_opt_test
 import os
 
 def generate_production():
@@ -19,6 +20,7 @@ def generate_production():
 
     dirs = create_dirs.create_dirs(volume_number)
     files = create_dirs.create_files(volume_number)
+    opt_file, dat_file = files
     # DONE - create production directory structure
         # DONE - create OPT file
         # DONE - create DAT file
@@ -40,6 +42,9 @@ def generate_production():
         # DONE -- extract text
         # DONE -- move text to propoer output_directory
         # DONE -- update OPT / DAT file
+
+    dat_opt_test.check_opt_and_dat(opt_file, dat_file, dirs, volume_number, production_prefix, start_bates_number, num_digits)
+    # DONE -- test results to ensure script output is correct
 
 if __name__ == '__main__':
     generate_production()

@@ -2,7 +2,7 @@ import os
 import tempfile
 from pdf2image import convert_from_path
 
-def split_multipage_tiff(pdf_file_path, output_directory=os.getcwd()):
+def split_multipage_pdf(pdf_file_path, output_directory=os.getcwd()):
 
     # convert file to jpgs
     # output significantly faster with output folder ...

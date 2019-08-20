@@ -1,6 +1,8 @@
 import csv
+import os
+from pathlib import PurePath
 
-def check_opt_and_dat(opt_file, dat_file, production_prefix, start_bates_number, num_digits):
+def check_opt_and_dat(opt_file, dat_file, dirs, volume_number, production_prefix, start_bates_number, num_digits):
     print("Checking and comparing OPT file and DAT file for data errors...")
 
     #read data from opt file into array
@@ -37,7 +39,29 @@ def check_opt_and_dat(opt_file, dat_file, production_prefix, start_bates_number,
 
     dat_counter = 0
     for i, opt_line in enumerate(opt_lines):
-        # Y indicator in OPT signals beginning of document
+
+        # check image file referenced in row exists
+        prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
+
+        # convert prod_home to Path object and set image path string
+        # replace separator to match current os
+        if os.name == 'posix':
+            altsep = "\\"
+        else:
+            altsep = "/"
+
+        prod_home = PurePath(prod_home.replace(altsep, os.sep))
+        image_path = PurePath(opt_line[2].replace(altsep, os.sep))
+
+        # assert the file referenced in OPT row exists
+        try:
+            assert os.path.exists(prod_home.joinpath(image_path))
+        except AssertionError:
+            print(f"File {opt_line[2]} not found in image path.")
+            raise AssertionError
+
+        # Y indicator in fourth column of OPT row signals beginning of document
+        # on each new document, check whether OPT and DAT agree
         if opt_line[3] == "Y":
 
             # increment at beginning of loop (rather than end) to skip DAT header
@@ -85,13 +109,3 @@ def check_opt_and_dat(opt_file, dat_file, production_prefix, start_bates_number,
                 raise AssertionError
 
     return True
-
-if __name__ == "__main__":
-    load_file_dir = "/Users/stephennagy/Documents/Code/Completed1/VOL01/"
-    opt_file = "VOL01.opt"
-    dat_file = "VOL01.dat"
-    production_prefix = "MOCA-ITC1158-"
-    start_bates_number = "1"
-    num_digits = "7"
-
-    check_opt_and_dat(opt_file, dat_file, production_prefix, start_bates_number, num_digits)

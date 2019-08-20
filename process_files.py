@@ -1,6 +1,6 @@
 
-import imgsplit
-import img_converter
+import pdfsplit
+import cloud_converter
 import file_scan
 import create_dirs
 import progress_bar
@@ -96,15 +96,17 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 img.save(filename=f"{prod_img001}/{caption1}.jpg")
 
             # reduce file size
-            full_size = PILImage.open(f"{prod_img001}/{caption1}.jpg")
-            full_size.save(f"{prod_img001}/{caption1}.jpg", optimize=True, quality=50)
+            convert_command = f'convert "{prod_img001}/{caption1}.jpg" -compress group4 "{prod_img001}/{caption1}.tiff"'
+            delete_command = f'rm "{prod_img001}/{caption1}.jpg"'
+            os.system(convert_command)
+            os.system(delete_command)
 
             ## STEP 3: UPDATE PRODUCTION DATA FILES
 
             # write OPT file row
             with open(opt_file, mode="a", encoding="cp1252") as opt_f:
                 opt_writer = csv.writer(opt_f, delimiter=",")
-                opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{caption1}.jpg", "Y", "", "", "1"])
+                opt_writer.writerow([f"{production_prefix}{str(current_bates_number).zfill(num_digits)}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{caption1}.tiff", "Y", "", "", "1"])
 
             # write DAT file row
             with open(dat_file, mode="a", encoding="utf-8") as dat_f:
@@ -127,20 +129,19 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             os.mkdir(temp_txt_dir)
 
             # if not PDF, convert first to pdf, then tiff
+            # use cloudconvert script to convert to PDF
             if ( file_extension != ".pdf" ):
 
                 temp_pdf_file = temp_dir.name + "/" + filename + ".pdf"
-                temp_pdf_path = img_converter.convert_file(file, temp_pdf_file, input_format=file_extension[1:], output_format="pdf")
-                #raw_tiff_path = img_converter.convert_file(temp_pdf_path, temp_tiff_file, input_format="pdf", output_format="tiff")
+                temp_pdf_path = cloud_converter.convert_file(file, temp_pdf_file, input_format=file_extension[1:], output_format="pdf")
 
             # if already PDF, convert to tiff directly
             else:
                 temp_pdf_path = file
                 # DONE -- convert file to tiff
-                #raw_tiff_path = img_converter.convert_file(file, temp_tiff_file, input_format=file_extension[1:], output_format="tiff")
 
-            # DONE -- split multipage tiff into individual jpgs
-            split_jpgs_path = imgsplit.split_multipage_tiff(temp_pdf_path, temp_split_dir)
+            # DONE -- split multipage pdf into individual jpgs
+            split_jpgs_path = pdfsplit.split_multipage_pdf(temp_pdf_path, temp_split_dir)
 
             # rename each individual jpg, tag with bates number and designations
             # multithread this operation to speed up
@@ -201,13 +202,17 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
                 current_bates_number += max_threads
 
             # move each individual jpg to proper output_directory
+            # convert to Group 4 tiff to reduce size
             bates_jpgs_list = file_scan.recursive_scan(split_jpgs_path)
             for jpg_file in sorted(bates_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f))))):
-                filename = os.path.basename(jpg_file)
-                os.rename(jpg_file, prod_img001 + "/" + filename)
+                filename, ext = os.path.splitext(os.path.basename(jpg_file))
+                convert_command = f'convert "{jpg_file}" -compress group4 "{prod_img001}/{filename}.tiff"'
+                delete_command = f'rm "{jpg_file}"'
+                os.system(convert_command)
+                os.system(delete_command)
 
-            # extract text and move text to propoer output_directory
-            raw_txt_path = img_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt")
+            # extract text and move text to proper output_directory
+            raw_txt_path = cloud_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt")
             os.rename(temp_txt_file, prod_txt001 + "/" + f"{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt")
 
             # write DAT file row
@@ -230,10 +235,6 @@ def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
     # generate bates number / confidentiality designations
     caption1 = bates_number
     caption2 = "CONFIDENTIAL BUSINESS INFORMATION - SUBJECT TO PROTECTIVE ORDER"
-
-    # reduce file size of image
-    full_size = PILImage.open(jpg_file)
-    full_size.save(jpg_file, optimize=True, dpi=(300,300))
 
     # use wand image library to edit jpg
     with Image(filename=jpg_file) as img:
@@ -274,9 +275,9 @@ def write_opt(opt_file, volume_number, bates_number, doc_length, i):
     with open(opt_file, mode="a", encoding="cp1252") as opt_f:
         opt_writer = csv.writer(opt_f, delimiter=",")
         if i == 0:
-            opt_writer.writerow([f"{bates_number}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{bates_number}.jpg", "Y", "", "", doc_length])
+            opt_writer.writerow([f"{bates_number}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{bates_number}.tiff", "Y", "", "", doc_length])
         else:
-            opt_writer.writerow([f"{bates_number}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{bates_number}.jpg", "", "", "", ""])
+            opt_writer.writerow([f"{bates_number}", volume_number, f".\\{volume_number}\\IMAGES\\IMG001\\{bates_number}.tiff", "", "", "", ""])
 
     return
 
