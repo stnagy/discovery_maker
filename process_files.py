@@ -147,56 +147,32 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
             # multithread this operation to speed up
             split_jpgs_list = file_scan.recursive_scan(split_jpgs_path)
             sorted_split_jpgs_list = sorted(split_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f)))))
+
+            # threading
             max_threads = 1
 
             for i, jpg_files in enumerate(batch(sorted_split_jpgs_list, n=max_threads)):
 
                 ## MULTITHREAD THIS PART TO INCREASE PROCESSOR UTILIZATION
-                ## GENERATING JPG IS LONGEST PART OF PROCESS
+                ## GENERATING JPG IS SLOWEST PART OF PROCESS
 
-                # form arguments
-                t0_file = jpg_files[0]
-                #t1_file = jpg_files[1]
-                #t2_file = jpg_files[2]
-                #t3_file = jpg_files[3]
+                threads_list = []
+                for j in range(max_threads):
+                    this_bates = f"{production_prefix}{str(current_bates_number + j).zfill(num_digits)}"
+                    this_file = jpg_files[j]
+                    threads_list.append(threading.Thread(target=generate_jpg, args=(this_file, split_jpgs_path, this_bates, confidentiality,)))
 
-                t0_i = 0
-                #t1_i = 1
-                #t2_i = 2
-                #t3_i = 3
+                for thread in threads_list:
+                    thread.start()
 
-                t0_bates = f"{production_prefix}{str(current_bates_number + t0_i).zfill(num_digits)}"
-                #t1_bates = f"{production_prefix}{str(current_bates_number + t1_i).zfill(num_digits)}"
-                #t2_bates = f"{production_prefix}{str(current_bates_number + t2_i).zfill(num_digits)}"
-                #t3_bates = f"{production_prefix}{str(current_bates_number + t3_i).zfill(num_digits)}"
+                for thread in threads_list:
+                    thread.join()
 
-                # create threads
-                t0 = threading.Thread(target=generate_jpg, args=(t0_file, split_jpgs_path, t0_bates, confidentiality,))
-                #t1 = threading.Thread(target=generate_jpg, args=(t1_file, split_jpgs_path, t1_bates, confidentiality,))
-                #t2 = threading.Thread(target=generate_jpg, args=(t2_file, split_jpgs_path, t2_bates, confidentiality,))
-                #t3 = threading.Thread(target=generate_jpg, args=(t3_file, split_jpgs_path, t3_bates, confidentiality,))
-
-                # start threads
-                t0.start()
-                #t1.start()
-                #t2.start()
-                #t3.start()
-
-                # join threads -- don't continue until all threads have completed
-                # start threads
-                t0.join()
-                #t1.join()
-                #t2.join()
-                #t3.join()
-
-                # write update opt file
-                # do this separately, because we cannot multithread this operation
+                # write OPT rows after creating images
                 doc_length = len(split_jpgs_list)
                 curr_page = current_bates_number - beginning_bates_number
-                write_opt(opt_file, volume_number, t0_bates, doc_length, curr_page)
-                #write_opt(opt_file, volume_number, t1_bates, doc_length, t1_i)
-                #write_opt(opt_file, volume_number, t2_bates, doc_length, t2_i)
-                #write_opt(opt_file, volume_number, t3_bates, doc_length, t3_i)
+                for j in range(max_threads):
+                    write_opt(opt_file, volume_number, this_bates, doc_length, curr_page + j)
 
                 # increment current bates number by max threads
                 current_bates_number += max_threads
@@ -252,7 +228,7 @@ def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
         font_height = height/nfh
 
         # select font
-        font = Font(path='/Library/Fonts/Arial.ttf', size=font_height, color=Color("black"))
+        font = Font(path='Arial.ttf', size=font_height, color=Color("black"))
 
         # draw bates caption
         img.caption(caption1, font=font, gravity="south_east")
