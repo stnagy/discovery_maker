@@ -9,7 +9,6 @@ import dat_opt_test
 import os
 import pysnooper
 
-@pysnooper.snoop("pysnooper.log")
 def generate_production():
 
     print("Logging python debug to pysnooper.log")
@@ -50,8 +49,12 @@ def generate_production():
     dat_opt_test.check_opt_and_dat(opt_file, dat_file, dirs, volume_number, production_prefix, start_bates_number, num_digits)
     # DONE -- test results to ensure script output is correct
 
+
     print("Successfully completed production. Removing pysnooper logfile")
-    os.system("rm pysnooper.log")
+    try:
+        os.system("rm pysnooper.log")
+    except:
+        print("No pysnooper logfile found. ")
 
 if __name__ == '__main__':
     generate_production()

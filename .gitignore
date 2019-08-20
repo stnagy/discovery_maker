@@ -12,3 +12,7 @@ __pycache__/
 
 # CloudConvert API Key
 cloudconvert_api_key.py
+
+# Production Files
+For Production/
+COMPLETED/
