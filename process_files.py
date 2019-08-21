@@ -5,6 +5,7 @@ import file_scan
 import create_dirs
 import progress_bar
 import pysnooper
+import zipfile
 
 import os
 import tempfile
@@ -36,44 +37,13 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
     progress_bar.printProgressBar(0, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
     # iterate over directory of input files
-    for i_file, file in enumerate(files_to_convert):
-        beginning_bates_number = current_bates_number
+    for i, file in enumerate(files_to_convert):
 
-        # get file path + extension
-        throw_away, file_extension = os.path.splitext(file)
+        current_bates_number = process_file(file, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, dirs, files)
 
-        # get file path + filename
-        filename, throw_away = os.path.splitext(os.path.basename(file))
+        progress_bar.printProgressBar(i + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
-        # create temporary directory to store files
-        temp_dir = tempfile.TemporaryDirectory()
-
-        temp_split_dir = temp_dir.name + "/" + "temp_jpgs"
-
-        temp_txt_file = temp_dir.name + "/" + filename + ".txt"
-        temp_txt_dir = temp_dir.name + "/" + "temp_txt"
-
-        temp_zip_file = temp_dir.name + "/" + filename + ".zip"
-        temp_extract_dir = temp_dir.name + "/" + "temp_extract"
-
-        os.mkdir(temp_split_dir)
-        os.mkdir(temp_txt_dir)
-        os.mkdir(temp_zip_dir)
-
-        # if file is archive or email file, then extract files and convert all of the files in the archive
-        if ( file_extension in [".7z", ".ace", ".bz", ".bz2", ".dmg", ".eml", ".iso", ".rar", ".tar", ".tar.7z", ".tar.bz", ".tar.bz2", ".tar.gz", ".tar.lzo", ".tar.xz", ".tgz", ".zip"] ):
-
-            if ( file_extension == ".zip" ):
-                temp_zip_file = file
-            else:
-                temp_zip_file = cloud_converter.convert_file(file, temp_extract_dir, input_format=file_extension[1:], output_format="zip")
-
-            current_bates_number = process_zip_file(temp_zip_file, file_extension, volume_number, production_prefix, current_bates_number, num_digits, dirs, files, current_bates_number)
-            continue
-
-        else:
-            current_bates_number = process_individual_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files)
-            continue
 
 def batch(iterable, n=1):
     l = len(iterable)
@@ -130,23 +100,85 @@ def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
 
     return
 
-def process_individual_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files):
-
-    # for some files, just produce natives
-    if ( file_extension in [".csv", ".dwg", ".dxf", ".numbers", ".xls", ".xlsm", ".xlsx"] ):
-        current_bates_number = process_native_file(file, temp_dir, file_extension, volume_number, production_prefix, current_bates_number, num_digits, confidentiality, dirs, files)
-
-    # otherwise, image and get text
-    elif ( file_extension in [".doc", ".docm", ".docx", ".html", ".md", ".pages", ".pdf", ".pps", ".ppsx", ".ppt", ".pptm", ".pptx", ".rtf", ".txt"]):
-        current_bates_number = process_normal_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files)
-
-    else:
-        print("File format not currently supported")
-        raise TypeError
+def process_email_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+    num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
 
     return current_bates_number
 
-def process_native_file(file, temp_dir, file_extension, volume_number, production_prefix, current_bates_number, num_digits, confidentiality, dirs, files):
+def process_file(file, volume_number, production_prefix, start_bates_number,
+    num_digits, confidentiality, current_bates_number, dirs, files):
+
+    beginning_bates_number = current_bates_number
+
+    # get file path + extension
+    throw_away, file_extension = os.path.splitext(file)
+
+    # get file path + filename
+    filename, throw_away = os.path.splitext(os.path.basename(file))
+
+    # create temporary directory to store files
+    temp_dir = tempfile.TemporaryDirectory()
+
+    temp_split_dir = temp_dir.name + "/" + "temp_jpgs"
+
+    temp_txt_file = temp_dir.name + "/" + filename + ".txt"
+    temp_txt_dir = temp_dir.name + "/" + "temp_txt"
+
+    temp_zip_file = temp_dir.name + "/" + filename + ".zip"
+    temp_extract_dir = temp_dir.name + "/" + "temp_extract"
+
+    os.mkdir(temp_split_dir)
+    os.mkdir(temp_txt_dir)
+    os.mkdir(temp_zip_dir)
+
+    # if file is archive file, then extract files and convert all of the files in the archive
+    if ( file_extension in [".7z", ".ace", ".bz", ".bz2", ".dmg", ".iso", ".rar", ".tar", ".tar.7z", ".tar.bz", ".tar.bz2", ".tar.gz", ".tar.lzo", ".tar.xz", ".tgz", ".zip"] ):
+
+        if ( file_extension == ".zip" ):
+            temp_zip_file = file
+
+        else:
+            temp_zip_file = cloud_converter.convert_file(file, temp_extract_dir, input_format=file_extension[1:], output_format="zip")
+
+        current_bates_number = process_zip_file(temp_zip_file, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, dirs, files)
+
+    # if it is not an archive, then process the individual file
+    else:
+        current_bates_number = process_individual_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+
+    return current_bates_number
+
+def process_individual_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+    num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
+
+    # special processing required for email files
+    if ( file_extension == ".eml"):
+        current_bates_number = process_email_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+
+    # regular processing for normal files of recognized format
+    elif ( file_extension in [".doc", ".docm", ".docx", ".html", ".md", ".pages", ".pdf", ".pps", ".ppsx", ".ppt", ".pptm", ".pptx", ".rtf", ".txt"]):
+        current_bates_number = process_normal_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+
+    # if not a recognized format, produce as native
+    else:
+        current_bates_number = process_native_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+
+    return current_bates_number
+
+def process_native_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+    num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
 
     prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
     opt_file, dat_file = files
@@ -216,12 +248,12 @@ def process_native_file(file, temp_dir, file_extension, volume_number, productio
     os.rename(file, completed_dir + "/" + os.path.basename(file))
     # clean up temporary directory
     temp_dir.cleanup()
-    # update progress bar
-    progress_bar.printProgressBar(i_file + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
     return current_bates_number
 
-def process_normal_file(file, temp_dir, temp_split_dir, file_extension, volume_number, production_prefix, current_bates_number, beginning_bates_number, num_digits, confidentiality, dirs, files):
+def process_normal_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
+    num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
+    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
 
     prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
     opt_file, dat_file = files
@@ -301,13 +333,19 @@ def process_normal_file(file, temp_dir, temp_split_dir, file_extension, volume_n
     # clean up temporary directory
     temp_dir.cleanup()
     # update progress bar
-    progress_bar.printProgressBar(i_file + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
     return current_bates_number
 
-def process_zip_file():
+def process_zip_file(temp_zip_file, volume_number, production_prefix, start_bates_number,
+    num_digits, confidentiality, current_bates_number, dirs, files):
 
-    # iterate over files and process them
+    with zipfile.Zipfile(temp_zip_file, "r") as zip_ref:
+        zip_ref.extractall(temp_zip_dir)
+
+    unzipped_files = file_scan.recursive_scan(temp_zip_dir)
+    for unzipped_file in unzipped_file:
+        current_bates_number = process_file(unzipped_file, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, dirs, files)
 
     return current_bates_number
 
