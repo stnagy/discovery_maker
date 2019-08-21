@@ -1,7 +1,7 @@
 import cloudconvert
 import cloudconvert_api_key
 
-def convert_file(input_file_path, output_file_path, input_format="pdf", output_format="tiff"):
+def convert_file(input_file_path, output_file_path, input_format="docx", output_format="pdf", cloudconvert_mode="convert"):
 
     # retry 100 times
     for i in range(0, 100):
@@ -15,6 +15,7 @@ def convert_file(input_file_path, output_file_path, input_format="pdf", output_f
                 "inputformat": input_format,
                 "outputformat": output_format,
                 "input": "upload",
+                "mode": cloudconvert_mode,
                 "file": open(input_file_path, 'rb')
             })
 

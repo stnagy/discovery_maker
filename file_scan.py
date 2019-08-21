@@ -18,7 +18,8 @@ def recursive_scan(path=os.getcwd()):
 def filter_all(all_files):
 
     # these are the types of files we can feed into the converter
-    permitted_extensions = [".csv", ".doc", ".docx", ".html", ".pdf", ".ppt", ".pptx", ".rtf", ".txt", ".xls", ".xlsx"]
+    permitted_extensions = [".csv", ".doc", ".docx", ".eml", ".html", ".pdf", ".ppt", ".pptx",
+        ".rtf", ".txt", ".xls", ".xlsx", ".zip"]
 
     filtered_list = []
     for i in all_files:

@@ -44,12 +44,13 @@ def process_files(volume_number, production_prefix, start_bates_number, num_digi
 
         progress_bar.printProgressBar(i + 1, l, prefix = 'Progress:', suffix = 'Complete', length = 50)
 
-
+@pysnooper.snoop("pysnooper.log")
 def batch(iterable, n=1):
     l = len(iterable)
     for ndx in range(0, l, n):
         yield iterable[ndx:min(ndx + n, l)]
 
+@pysnooper.snoop("pysnooper.log")
 def convert_jpg_to_tiff(jpg_file, prod_img001):
     filename, ext = os.path.splitext(os.path.basename(jpg_file))
     convert_command = f'convert "{jpg_file}" -compress group4 "{prod_img001}/{filename}.tiff"'
@@ -59,6 +60,7 @@ def convert_jpg_to_tiff(jpg_file, prod_img001):
 
     return
 
+@pysnooper.snoop("pysnooper.log")
 def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
     # generate jpg from input parameters
 
@@ -100,12 +102,35 @@ def generate_jpg(jpg_file, split_jpgs_path, bates_number, confidentiality):
 
     return
 
+@pysnooper.snoop("pysnooper.log")
 def process_email_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
+    temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files):
+
+    prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
+    opt_file, dat_file = files
+
+    # for now, treat email file as if it were an archive
+    # this code will be refactored later to account for doc ids and group ids
+    temp_zip_dir = cloud_converter.convert_file(file, temp_zip_dir, input_format=file_extension[1:], output_format="*", cloudconvert_mode="extract")
+    temp_zip_file = file_scan.recursive_scan(temp_zip_dir)[0]
+
+    # unzip file
+    with zipfile.ZipFile(temp_zip_file, "r") as zip_ref:
+        zip_ref.extractall(temp_zip_dir)
+
+    # delete zip file
+    os.remove(temp_zip_file)
+
+    # iterate over unzipped files, and process each file individually
+    unzipped_files = file_scan.recursive_scan(temp_zip_dir)
+    for unzipped_file in unzipped_files:
+        current_bates_number = process_file(unzipped_file, volume_number, production_prefix, start_bates_number,
+            num_digits, confidentiality, current_bates_number, dirs, files)
 
     return current_bates_number
 
+@pysnooper.snoop("pysnooper.log")
 def process_file(file, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, dirs, files):
 
@@ -126,11 +151,14 @@ def process_file(file, volume_number, production_prefix, start_bates_number,
     temp_txt_dir = temp_dir.name + "/" + "temp_txt"
 
     temp_zip_file = temp_dir.name + "/" + filename + ".zip"
-    temp_extract_dir = temp_dir.name + "/" + "temp_extract"
+    temp_zip_dir = temp_dir.name + "/" + "temp_extract"
 
     os.mkdir(temp_split_dir)
     os.mkdir(temp_txt_dir)
     os.mkdir(temp_zip_dir)
+
+    prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
+    opt_file, dat_file = files
 
     # if file is archive file, then extract files and convert all of the files in the archive
     if ( file_extension in [".7z", ".ace", ".bz", ".bz2", ".dmg", ".iso", ".rar", ".tar", ".tar.7z", ".tar.bz", ".tar.bz2", ".tar.gz", ".tar.lzo", ".tar.xz", ".tgz", ".zip"] ):
@@ -139,7 +167,7 @@ def process_file(file, volume_number, production_prefix, start_bates_number,
             temp_zip_file = file
 
         else:
-            temp_zip_file = cloud_converter.convert_file(file, temp_extract_dir, input_format=file_extension[1:], output_format="zip")
+            temp_zip_file = cloud_converter.convert_file(file, temp_zip_dir, input_format=file_extension[1:], output_format="zip", cloudconvert_mode="convert")
 
         current_bates_number = process_zip_file(temp_zip_file, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, dirs, files)
@@ -148,37 +176,42 @@ def process_file(file, volume_number, production_prefix, start_bates_number,
     else:
         current_bates_number = process_individual_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+            temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files)
+
+    # move file to completed dir
+    os.rename(file, completed_dir + "/" + os.path.basename(file))
 
     return current_bates_number
 
+@pysnooper.snoop("pysnooper.log")
 def process_individual_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
+    temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files):
 
     # special processing required for email files
     if ( file_extension == ".eml"):
         current_bates_number = process_email_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+            temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files)
 
     # regular processing for normal files of recognized format
     elif ( file_extension in [".doc", ".docm", ".docx", ".html", ".md", ".pages", ".pdf", ".pps", ".ppsx", ".ppt", ".pptm", ".pptx", ".rtf", ".txt"]):
         current_bates_number = process_normal_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+            temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files)
 
     # if not a recognized format, produce as native
     else:
         current_bates_number = process_native_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-            temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files)
+            temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files)
 
     return current_bates_number
 
+@pysnooper.snoop("pysnooper.log")
 def process_native_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
+    temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files):
 
     prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
     opt_file, dat_file = files
@@ -245,15 +278,15 @@ def process_native_file(file, filename, file_extension, volume_number, productio
 
     current_bates_number += 1
 
-    os.rename(file, completed_dir + "/" + os.path.basename(file))
     # clean up temporary directory
     temp_dir.cleanup()
 
     return current_bates_number
 
+@pysnooper.snoop("pysnooper.log")
 def process_normal_file(file, filename, file_extension, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, beginning_bates_number, temp_dir, temp_split_dir,
-    temp_text_file, temp_text_dir, temp_zip_file, temp_zip_dir, dirs, files):
+    temp_txt_file, temp_txt_dir, temp_zip_file, temp_zip_dir, dirs, files):
 
     prod_home, prod_data, prod_img, prod_nat, prod_txt, prod_img001, prod_nat001, prod_txt001, completed_dir = dirs
     opt_file, dat_file = files
@@ -261,7 +294,7 @@ def process_normal_file(file, filename, file_extension, volume_number, productio
     if ( file_extension != ".pdf" ):
 
         temp_pdf_file = temp_dir.name + "/" + filename + ".pdf"
-        temp_pdf_path = cloud_converter.convert_file(file, temp_pdf_file, input_format=file_extension[1:], output_format="pdf")
+        temp_pdf_path = cloud_converter.convert_file(file, temp_pdf_file, input_format=file_extension[1:], output_format="pdf", cloudconvert_mode="convert")
 
     # if already PDF, convert to tiff directly
     else:
@@ -278,7 +311,7 @@ def process_normal_file(file, filename, file_extension, volume_number, productio
     sorted_split_jpgs_list = sorted(split_jpgs_list, key=lambda f: int("".join(list(filter(str.isdigit, f)))))
 
     # threading
-    max_threads = 4
+    max_threads = 1
 
     for jpg_files in batch(sorted_split_jpgs_list, n=max_threads):
 
@@ -321,34 +354,41 @@ def process_normal_file(file, filename, file_extension, volume_number, productio
             thread.join()
 
     # extract text and move text to proper output_directory
-    raw_txt_path = cloud_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt")
-    os.rename(temp_txt_file, prod_txt001 + "/" + f"{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt")
+    # only use cloudconvert if file is not of type txt
+    if file_extension[1:] != "txt":
+        raw_txt_path = cloud_converter.convert_file(file, temp_txt_file, input_format=file_extension[1:], output_format="txt", cloudconvert_mode="convert")
+        os.rename(temp_txt_file, prod_txt001 + "/" + f"{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt")
+    else:
+        copyfile(file, prod_txt001 + "/" + f"{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt")
 
     # write DAT file row
     with open(dat_file, mode="a", encoding="utf-8") as dat_f:
         dat_writer = csv.writer(dat_f, delimiter=f"{chr(20)}")
         dat_writer.writerow([f"{chr(254)}{production_prefix}{str(beginning_bates_number).zfill(num_digits)}{chr(254)}",f"{chr(254)}{production_prefix}{str(current_bates_number-1).zfill(num_digits)}{chr(254)}",f"{chr(254)}.\\{volume_number}\\TEXT\\TEXT001\\{production_prefix}{str(beginning_bates_number).zfill(num_digits)}.txt{chr(254)}", f"{chr(254)}{chr(254)}"])
 
-    os.rename(file, completed_dir + "/" + os.path.basename(file))
     # clean up temporary directory
     temp_dir.cleanup()
     # update progress bar
 
     return current_bates_number
 
+@pysnooper.snoop("pysnooper.log")
 def process_zip_file(temp_zip_file, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, dirs, files):
 
-    with zipfile.Zipfile(temp_zip_file, "r") as zip_ref:
+    # unzip file
+    with zipfile.ZipFile(temp_zip_file, "r") as zip_ref:
         zip_ref.extractall(temp_zip_dir)
 
+    # iterate over unzipped files, and process each file individually
     unzipped_files = file_scan.recursive_scan(temp_zip_dir)
-    for unzipped_file in unzipped_file:
+    for unzipped_file in unzipped_files:
         current_bates_number = process_file(unzipped_file, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, dirs, files)
 
     return current_bates_number
 
+@pysnooper.snoop("pysnooper.log")
 def write_opt(opt_file, volume_number, bates_number, doc_length, i):
     # write OPT file row
     with open(opt_file, mode="a", encoding="cp1252") as opt_f:
