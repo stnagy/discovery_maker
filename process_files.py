@@ -6,6 +6,7 @@ import create_dirs
 import progress_bar
 import pysnooper
 import zipfile
+import re
 
 import os
 import tempfile
@@ -124,9 +125,34 @@ def process_email_file(file, filename, file_extension, volume_number, production
 
     # iterate over unzipped files, and process each file individually
     unzipped_files = file_scan.recursive_scan(temp_zip_dir)
-    for unzipped_file in unzipped_files:
-        current_bates_number = process_file(unzipped_file, volume_number, production_prefix, start_bates_number,
+
+    # if email file has part1.txt and part2.txt
+    # remove part1.text and convert part2.txt to html
+    part1_index = None
+    part2_index = None
+
+    for i, unzipped_file in enumerate(unzipped_files):
+        if re.search("part1.txt", unzipped_file):
+            part1_index = i
+        if re.search("part2.txt", unzipped_file):
+            part2_index = i
+
+    if part1_index != None and part2_index != None:
+        part1_file = unzipped_files.pop(part1_index)
+        part2_file = unzipped_files.pop(part2_index)
+
+        part2_filepath, part2_ext = os.path.splitext(part2_file)
+        new_part2_file = part2_filepath + ".html"
+        os.rename(part2_file, new_part2_file)
+
+        current_bates_number = process_file(new_part2_file, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, dirs, files)
+
+    # after processing email, process any attachments
+    if len(unzipped_files) > 0:
+        for unzipped_file in unzipped_files:
+            current_bates_number = process_file(unzipped_file, volume_number, production_prefix, start_bates_number,
+                num_digits, confidentiality, current_bates_number, dirs, files)
 
     return current_bates_number
 
@@ -169,7 +195,7 @@ def process_file(file, volume_number, production_prefix, start_bates_number,
         else:
             temp_zip_file = cloud_converter.convert_file(file, temp_zip_dir, input_format=file_extension[1:], output_format="zip", cloudconvert_mode="convert")
 
-        current_bates_number = process_zip_file(temp_zip_file, volume_number, production_prefix, start_bates_number,
+        current_bates_number = process_zip_file(temp_zip_file, temp_zip_dir, volume_number, production_prefix, start_bates_number,
             num_digits, confidentiality, current_bates_number, dirs, files)
 
     # if it is not an archive, then process the individual file
@@ -373,7 +399,7 @@ def process_normal_file(file, filename, file_extension, volume_number, productio
     return current_bates_number
 
 @pysnooper.snoop("pysnooper.log")
-def process_zip_file(temp_zip_file, volume_number, production_prefix, start_bates_number,
+def process_zip_file(temp_zip_file, temp_zip_dir, volume_number, production_prefix, start_bates_number,
     num_digits, confidentiality, current_bates_number, dirs, files):
 
     # unzip file
